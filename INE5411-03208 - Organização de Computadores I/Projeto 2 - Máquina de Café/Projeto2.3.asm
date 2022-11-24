@@ -1,5 +1,7 @@
 .data
-doses:		.byte 20, 20, 20, 20	
+doses:		.byte 20, 20, 20, 20
+.align 0
+buffer:		.byte 0 0
 
 .text	
 Inicializa:
@@ -7,17 +9,18 @@ Inicializa:
 	lb $s1, doses+1		#Doses Leite
 	lb $s2, doses+2		#Doses Chocolate
 	lb $s3, doses+3 	#Doses Acucar
+	li $s4, 20		#Refill
 	
 .globl main
 main:	
-	li $t0, 0		#Tipo de Cafe
+	li $t0, 0		#Tipo de Cafe (1 = CafePuro, 2 = CafeComLeite, 3 = Mochaccino, 4 = Refill) 
 	li $t1, 0		#Tempo de preparo em s
-	li $t2, 0 		#Tamanho do Cafe
-	li $t3, 0		#Com/Sem Acucar
-	li $t4, 20		#Refill
+	li $t2, 0 		#Tamanho do Cafe (1 = P, 2 = G)
+	li $t3, 0		#Com/Sem Acucar	(1 = Sem, 2 = Com)
 	
 	jal Cafe
 	jal QuerAcucar
+	jal VerificaEstoque
 	
 	#Tempo de preparo syscall (sleep)
 	mul $t1, $t1, 1000
@@ -26,7 +29,8 @@ main:
 	syscall
 	
 	jal GerarCupom
-		
+
+				
 			
 Cafe:	
 	sw $ra, 0($sp)
@@ -37,28 +41,18 @@ Cafe:
 	syscall         	# chamada de sistema para E/S. Retorno estara em $v0
 	move $t0, $v0
 	
-	beq $t0, 2, CafeComLeite
-	beq $t0, 3, Mochaccino
 	beq $t0, 4, Refill
-	 		
+	jal Tamanho
+			
 CafePuro:
-	jal Tamanho
 	sub $s0, $s0, $t2
 	sb $s0, doses
-	j ExitCafe	
+	beq $t0, 1, ExitCafe	
 CafeComLeite:
-	jal Tamanho
-	sub $s0, $s0, $t2
-	sb $s0, doses
 	sub $s1, $s1, $t2
 	sb $s1, doses+1
-	j ExitCafe					
+	beq $t0, 2 ExitCafe					
 Mochaccino:
-	jal Tamanho
-	sub $s0, $s0, $t2
-	sb $s0, doses
-	sub $s1, $s1, $t2
-	sb $s1, doses+1
 	sub $s2, $s2, $t2
 	sb $s2, doses+2	
 ExitCafe:
@@ -70,9 +64,17 @@ ExitCafe:
 	jr $ra	
 
 
+
 Tamanho:
 	#Seleciona o tamanho do cafe syscall
-	beq $v0, 1, Pequeno
+	la $a0, buffer
+	li $a1, 2
+	li $v0, 8
+	syscall
+	
+	lb $t2, buffer
+	beq $t2, 80, Pequeno		#P
+	beq $t2, 112, Pequeno		#p
 Grande:
 	li $t2, 2
 	addi $t1, $t1, 10		#Soma Tempo Tamanho
@@ -86,24 +88,35 @@ Pequeno:
 
 QuerAcucar:
 	#Ver se quer acucar syscall
-	beq $v0, 2, Nao
+	la $a0, buffer
+	li $a1, 2
+	li $v0, 8
+	syscall
+	
+	lb $t2, buffer
+	beq $t2, 78, Nao		#n
+	beq $t2, 110, Nao		#N
+	
+	li $t2, 2
 	sub $s3, $s3, $t2
 	sb $s3, doses+3
 	li $t3, 1
 	mul $t9, $t3, $t2
 	add $t1, $t1, $t9
-Nao: 
+Nao: 	
+	li $t2, 1
 	jr $ra
 
 
 
-GerarCupom:	#TODO
+GerarCupom:		#TODO
 
 
 
-VerificaEstoque: #TODO
-
-
+VerificaEstoque: 	#TODO
+	jr $ra
+EmFalta:		#TODO
+	j main
 
 
 Refill:
@@ -111,5 +124,4 @@ Refill:
 	li $v0, 5       	# atribui 5 para $vo. Codigo para read_int
 	syscall         	# chamada de sistema para E/S. Retorno estara em $v0
 	subi $v0, $v0, 1
-	sb $t5, doses($v0)
-	
+	sb $s5, doses($v0)
